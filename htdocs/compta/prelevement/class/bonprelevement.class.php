@@ -276,7 +276,7 @@ class BonPrelevement extends CommonObject
 		$sql .= ", p.method_trans, p.fk_user_trans";
 		$sql .= ", p.date_credit as date_credit";
 		$sql .= ", p.fk_user_credit";
-		$sql .= ", p.statut";
+		$sql .= ", p.statut as status";
 		$sql .= " FROM ".MAIN_DB_PREFIX."prelevement_bons as p";
 		$sql .= " WHERE p.entity IN (".getEntity('invoice').")";
 		if ($rowid > 0) $sql .= " AND p.rowid = ".$rowid;
@@ -303,7 +303,8 @@ class BonPrelevement extends CommonObject
 				$this->date_credit    = $this->db->jdate($obj->date_credit);
 				$this->user_credit    = $obj->fk_user_credit;
 
-				$this->statut         = $obj->statut;
+				$this->status         = $obj->status;
+				$this->statut         = $obj->status;	// For backward compatibility
 
 				$this->fetched = 1;
 
@@ -646,17 +647,21 @@ class BonPrelevement extends CommonObject
 	/**
 	 *	Returns amount of withdrawal
 	 *
-	 *	@return		double	 	Total amount
+	 *	@param	string	$mode		'direct-debit' or 'credit-transfer'
+	 *	@return	double	 			<O if KO, Total amount
 	 */
-	public function SommeAPrelever()
+	public function SommeAPrelever($mode = 'direct-debit')
 	{
 		// phpcs:enable
 		global $conf;
 
 		$sql = "SELECT sum(pfd.amount) as nb";
-		$sql .= " FROM ".MAIN_DB_PREFIX."facture as f,";
+		if ($mode != 'credit-transfer') {
+			$sql .= " FROM ".MAIN_DB_PREFIX."facture as f,";
+		} else {
+			$sql .= " FROM ".MAIN_DB_PREFIX."facture_fourn as f,";
+		}
 		$sql .= " ".MAIN_DB_PREFIX."prelevement_facture_demande as pfd";
-		//$sql.= " ,".MAIN_DB_PREFIX."c_paiement as cp";
 		$sql .= " WHERE f.fk_statut = 1";
 		$sql .= " AND f.entity IN (".getEntity('invoice').")";
 		$sql .= " AND f.rowid = pfd.fk_facture";
@@ -676,32 +681,51 @@ class BonPrelevement extends CommonObject
 			$error = 1;
 			dol_syslog(get_class($this)."::SommeAPrelever Erreur -1");
 			dol_syslog($this->db->error());
+
+			return -1;
 		}
+	}
+
+	/**
+	 *	Get number of invoices waiting for payment
+	 *
+	 *	@param	string	$mode		'direct-debit' or 'credit-transfer'
+	 *	@return	int					<O if KO, number of invoices if OK
+	 */
+	public function nbOfInvoiceToPay($mode = 'direct-debit')
+	{
+		return $this->NbFactureAPrelever($mode);
 	}
 
 	// phpcs:disable PEAR.NamingConventions.ValidFunctionName.ScopeNotCamelCaps
 	/**
 	 *	Get number of invoices to withdrawal
-	 *	TODO delete params banque and agence when not necesary
 	 *
-	 *	@param	int		$banque		dolibarr mysoc bank
-	 *	@param	int		$agence		dolibarr mysoc agence
+	 *	@param	string	$mode		'direct-debit' or 'credit-transfer'
 	 *	@return	int					<O if KO, number of invoices if OK
 	 */
-	public function NbFactureAPrelever($banque = 0, $agence = 0)
+	public function NbFactureAPrelever($mode = 'direct-debit')
 	{
 		// phpcs:enable
 		global $conf;
 
 		$sql = "SELECT count(f.rowid) as nb";
-		$sql .= " FROM ".MAIN_DB_PREFIX."facture as f";
+		if ($mode == 'credit-transfer') {
+			$sql .= " FROM ".MAIN_DB_PREFIX."facture_fourn as f";
+		} else {
+			$sql .= " FROM ".MAIN_DB_PREFIX."facture as f";
+		}
 		$sql .= ", ".MAIN_DB_PREFIX."prelevement_facture_demande as pfd";
 		$sql .= " WHERE f.entity IN (".getEntity('invoice').")";
 		if (empty($conf->global->WITHDRAWAL_ALLOW_ANY_INVOICE_STATUS))
 		{
 			$sql .= " AND f.fk_statut = ".Facture::STATUS_VALIDATED;
 		}
-		$sql .= " AND f.rowid = pfd.fk_facture";
+		if ($mode == 'credit-transfer') {
+			$sql .= " AND f.rowid = pfd.fk_facture_fourn";
+		} else {
+			$sql .= " AND f.rowid = pfd.fk_facture";
+		}
 		$sql .= " AND pfd.traite = 0";
 		$sql .= " AND f.total_ttc > 0";
 

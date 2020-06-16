@@ -878,7 +878,10 @@ if (!$error && $massaction == 'cancelorders')
 			setEventMessages($langs->trans("ErrorObjectMustHaveStatusValidToBeCanceled", $cmd->ref), null, 'errors');
 			$error++;
 			break;
-		} else $result = $cmd->cancel();
+		} else {
+			// TODO We do not provide warehouse so no stock change here for the moment.
+			$result = $cmd->cancel();
+		}
 
 		if ($result < 0)
 		{
@@ -986,14 +989,19 @@ if (!$error && $massaction == "builddoc" && $permissiontoread && !GETPOST('butto
 				$input_files .= ' '.escapeshellarg($f);
 			}
 
-			$cmd = 'pdftk '.escapeshellarg($input_files).' cat output '.escapeshellarg($file);
+			$cmd = 'pdftk '.$input_files.' cat output '.escapeshellarg($file);
 			exec($cmd);
 
-			if (!empty($conf->global->MAIN_UMASK))
-				@chmod($file, octdec($conf->global->MAIN_UMASK));
+			// check if pdftk is installed
+			if (file_exists($file)) {
+				if (!empty($conf->global->MAIN_UMASK))
+					@chmod($file, octdec($conf->global->MAIN_UMASK));
 
-			$langs->load("exports");
-			setEventMessages($langs->trans('FileSuccessfullyBuilt', $filename.'_'.dol_print_date($now, 'dayhourlog')), null, 'mesgs');
+				$langs->load("exports");
+				setEventMessages($langs->trans('FileSuccessfullyBuilt', $filename.'_'.dol_print_date($now, 'dayhourlog')), null, 'mesgs');
+			} else {
+				setEventMessages($langs->trans('ErrorPDFTkOutputFileNotFound'), null, 'errors');
+			}
 		} else {
 			setEventMessages($langs->trans('NoPDFAvailableForDocGenAmongChecked'), null, 'errors');
 		}

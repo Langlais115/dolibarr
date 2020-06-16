@@ -61,13 +61,15 @@ if (!isset($mode) || $mode != 'noajax')    // For ajax call
 
 	$upload_dir = dirname(str_replace("../", "/", $rootdirfordoc.'/'.$file));
 
-    $ecmdir = new EcmDirectory($db);
-    $result = $ecmdir->fetch($section);
-    if (!$result > 0)
-    {
-        //dol_print_error($db,$ecmdir->error);
-        //exit;
-    }
+	$ecmdir = new EcmDirectory($db);
+	if ($section > 0) {
+	    $result = $ecmdir->fetch($section);
+	    if (!$result > 0)
+	    {
+	        //dol_print_error($db,$ecmdir->error);
+	        //exit;
+	    }
+	}
 } else // For no ajax call
 {
 	$rootdirfordoc = $conf->ecm->dir_output;
@@ -319,7 +321,7 @@ if ($type == 'directory')
 
         // When we show list of files for ECM files, $filearray contains file list, and directory is defined with modulepart + section into $param
         // When we show list of files for a directory, $filearray ciontains file list, and directory is defined with modulepart + $relativepath
-        //var_dump("title=".$title." modulepart=".$modulepart." useinecm=".$useinecm." perm=".$perm." relativepath=".$relativepath." param=".$param." url=".$url);
+        //var_dump("section=".$section." title=".$title." modulepart=".$modulepart." useinecm=".$useinecm." perm=".$perm." relativepath=".$relativepath." param=".$param." url=".$url);
         $formfile->list_of_documents($filearray, '', $modulepart, $param, 1, $relativepath, $perm, $useinecm, $textifempty, $maxlengthname, $title, $url, 0, $perm);
     }
 }

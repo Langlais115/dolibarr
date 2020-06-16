@@ -181,7 +181,7 @@ class MyObject extends CommonObject
 	//public $table_element_line = 'mymodule_myobjectline';
 
 	/**
-	 * @var int    Field with ID of parent key if this field has a parent
+	 * @var int    Field with ID of parent key if this object has a parent
 	 */
 	//public $fk_element = 'fk_myobject';
 
@@ -193,12 +193,14 @@ class MyObject extends CommonObject
 	/**
 	 * @var array	List of child tables. To test if we can delete object.
 	 */
-	//protected $childtables=array();
+	//protected $childtables = array();
 
 	/**
-	 * @var array	List of child tables. To know object to delete on cascade.
+	 * @var array    List of child tables. To know object to delete on cascade.
+	 *               If name matches '@ClassNAme:FilePathClass;ParentFkFieldName' it will
+	 *               call method deleteByParentField(parentId, ParentFkFieldName) to fetch and delete child object
 	 */
-	//protected $childtablesoncascade=array('mymodule_myobjectdet');
+	//protected $childtablesoncascade = array('mymodule_myobjectdet');
 
 	/**
 	 * @var MyObjectLine[]     Array of subtable lines
@@ -527,8 +529,8 @@ class MyObject extends CommonObject
 			return 0;
 		}
 
-		/*if (! ((empty($conf->global->MAIN_USE_ADVANCED_PERMS) && ! empty($user->rights->myobject->create))
-		 || (! empty($conf->global->MAIN_USE_ADVANCED_PERMS) && ! empty($user->rights->myobject->myobject_advance->validate))))
+		/*if (! ((empty($conf->global->MAIN_USE_ADVANCED_PERMS) && ! empty($user->rights->mymodule->myobject->write))
+		 || (! empty($conf->global->MAIN_USE_ADVANCED_PERMS) && ! empty($user->rights->mymodule->myobject->myobject_advance->validate))))
 		 {
 		 $this->error='NotEnoughPermissions';
 		 dol_syslog(get_class($this)."::valid ".$this->error, LOG_ERR);
@@ -1009,7 +1011,7 @@ class MyObject extends CommonObject
 		$langs->load("mymodule@mymodule");
 
 		if (!dol_strlen($modele)) {
-			$modele = 'standard';
+			$modele = 'standard_myobject';
 
 			if ($this->modelpdf) {
 				$modele = $this->modelpdf;

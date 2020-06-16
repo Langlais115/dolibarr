@@ -1762,7 +1762,8 @@ class Facture extends CommonInvoice
 	}
 
 	/**
-	 * Fetch previous and next situations invoices
+	 * Fetch previous and next situations invoices.
+	 * Return all previous and next invoices (both standard and credit notes).
 	 *
 	 * @return	void
 	 */
@@ -1773,7 +1774,7 @@ class Facture extends CommonInvoice
 		$this->tab_previous_situation_invoice = array();
 		$this->tab_next_situation_invoice = array();
 
-		$sql = 'SELECT rowid, situation_counter FROM '.MAIN_DB_PREFIX.'facture';
+		$sql = 'SELECT rowid, type, situation_cycle_ref, situation_counter FROM '.MAIN_DB_PREFIX.'facture';
 		$sql .= ' WHERE rowid <> '.$this->id;
 		$sql .= ' AND entity = '.$this->entity;
 		$sql .= ' AND situation_cycle_ref = '.(int) $this->situation_cycle_ref;
@@ -3980,16 +3981,19 @@ class Facture extends CommonInvoice
 
     // phpcs:disable PEAR.NamingConventions.ValidFunctionName.ScopeNotCamelCaps
 	/**
-	 *	Create a withdrawal request for a standing order.
+	 *	Create a withdrawal request for a direct debit order or a credit transfer order.
 	 *  Use the remain to pay excluding all existing open direct debit requests.
 	 *
-	 *	@param      User	$fuser      User asking the direct debit transfer
-	 *  @param		float	$amount		Amount we request direct debit for
-	 *	@return     int         		<0 if KO, >0 if OK
+	 *	@param      User	$fuser      	User asking the direct debit transfer
+	 *  @param		float	$amount			Amount we request direct debit for
+	 *  @param		string	$type			'direct-debit' or 'bank-transfer'
+	 *  @param		string	$sourcetype		Source ('facture' or 'supplier_invoice')
+	 *	@return     int         			<0 if KO, >0 if OK
 	 */
-    public function demande_prelevement($fuser, $amount = 0)
+    public function demande_prelevement($fuser, $amount = 0, $type = 'direct-debit', $sourcetype = 'facture')
 	{
         // phpcs:enable
+		global $conf;
 
 		$error = 0;
 
@@ -4003,7 +4007,12 @@ class Facture extends CommonInvoice
 
         	$sql = 'SELECT count(*)';
 			$sql .= ' FROM '.MAIN_DB_PREFIX.'prelevement_facture_demande';
-			$sql .= ' WHERE fk_facture = '.$this->id;
+			if ($type == 'bank-transfer') {
+				$sql .= ' WHERE fk_facture_fourn = '.$this->id;
+			} else {
+				$sql .= ' WHERE fk_facture = '.$this->id;
+			}
+			$sql .= ' AND ext_payment_id IS NULL';			// To exclude record done for some online payments
 			$sql .= ' AND traite = 0';
 
 			dol_syslog(get_class($this)."::demande_prelevement", LOG_DEBUG);
@@ -4028,16 +4037,24 @@ class Facture extends CommonInvoice
 
 					if (is_numeric($amount) && $amount != 0)
 					{
-						$sql = 'INSERT INTO '.MAIN_DB_PREFIX.'prelevement_facture_demande';
-						$sql .= ' (fk_facture, amount, date_demande, fk_user_demande, code_banque, code_guichet, number, cle_rib)';
+						$sql = 'INSERT INTO '.MAIN_DB_PREFIX.'prelevement_facture_demande(';
+						if ($type == 'bank-transfer') {
+							$sql .= 'fk_facture_fourn, ';
+						} else {
+							$sql .= 'fk_facture, ';
+						}
+						$sql .= ' amount, date_demande, fk_user_demande, code_banque, code_guichet, number, cle_rib, sourcetype, entity)';
 						$sql .= ' VALUES ('.$this->id;
 						$sql .= ",'".price2num($amount)."'";
 						$sql .= ",'".$this->db->idate($now)."'";
 						$sql .= ",".$fuser->id;
-						$sql .= ",'".$bac->code_banque."'";
-						$sql .= ",'".$bac->code_guichet."'";
-						$sql .= ",'".$bac->number."'";
-						$sql .= ",'".$bac->cle_rib."')";
+						$sql .= ",'".$this->db->escape($bac->code_banque)."'";
+						$sql .= ",'".$this->db->escape($bac->code_guichet)."'";
+						$sql .= ",'".$this->db->escape($bac->number)."'";
+						$sql .= ",'".$this->db->escape($bac->cle_rib)."'";
+						$sql .= ",'".$this->db->escape($sourcetype)."'";
+						$sql .= ",".$conf->entity;
+						$sql .= ")";
 
 						dol_syslog(get_class($this)."::demande_prelevement", LOG_DEBUG);
 						$resql = $this->db->query($sql);

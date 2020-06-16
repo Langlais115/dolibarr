@@ -443,10 +443,20 @@ abstract class CommonObject
 
 	public $next_prev_filter;
 
+	/**
+	 * @var array	List of child tables. To test if we can delete object.
+	 */
+	protected $childtables = array();
+
+	/**
+	 * @var array    List of child tables. To know object to delete on cascade.
+	 *               If name matches '@ClassNAme:FilePathClass;ParentFkFieldName' it will
+	 *               call method deleteByParentField(parentId, ParentFkFieldName) to fetch and delete child object
+	 */
+	protected $childtablesoncascade = array();
 
 
 	// No constructor as it is an abstract class
-
 	/**
 	 * Check an object id/ref exists
 	 * If you don't need/want to instantiate object and just need to know if object exists, use this method instead of fetch
@@ -635,6 +645,7 @@ abstract class CommonObject
 
 		$contactid = 0;
 		$thirdpartyid = 0;
+		$elementforaltlanguage = $this->element;
 		if ($this->element == 'societe')
 		{
 			$thirdpartyid = $this->id;
@@ -682,10 +693,11 @@ abstract class CommonObject
 					include_once DOL_DOCUMENT_ROOT.'/core/class/extralanguages.class.php';
 					$extralanguages = new ExtraLanguages($this->db);
 				}
-				$extralanguages->fetch_name_extralanguages('societe');
+				$extralanguages->fetch_name_extralanguages($elementforaltlanguage);
 
-				if (!empty($extralanguages->attributes['societe']['address']) || !empty($extralanguages->attributes['societe']['town']))
+				if (!empty($extralanguages->attributes[$elementforaltlanguage]['address']) || !empty($extralanguages->attributes[$elementforaltlanguage]['town']))
 				{
+					$out .= "<!-- alternatelanguage for '".$elementforaltlanguage."' set to fields '".join(',', $extralanguages->attributes[$elementforaltlanguage]). "' -->\n";
 					$this->fetchValuesForExtraLanguages();
 					if (!is_object($form)) $form = new Form($this->db);
 					$htmltext = '';
@@ -1804,7 +1816,7 @@ abstract class CommonObject
 		} elseif ($this->restrictiononfksoc == 1 && $this->element != 'societe' && !$user->rights->societe->client->voir && !$socid) $sql .= ", ".MAIN_DB_PREFIX."societe as s"; // If we need to link to societe to limit select to socid
 		elseif ($this->restrictiononfksoc == 2 && $this->element != 'societe' && !$user->rights->societe->client->voir && !$socid) $sql .= " LEFT JOIN ".MAIN_DB_PREFIX."societe as s ON te.fk_soc = s.rowid"; // If we need to link to societe to limit select to socid
 		if ($this->restrictiononfksoc && !$user->rights->societe->client->voir && !$socid)  $sql .= " LEFT JOIN ".MAIN_DB_PREFIX."societe_commerciaux as sc ON ".$aliastablesociete.".rowid = sc.fk_soc";
-		$sql .= " WHERE te.".$fieldid." < '".$this->db->escape($this->ref)."'"; // ->ref must always be defined (set to id if field does not exists)
+		$sql .= " WHERE te.".$fieldid." < '".$this->db->escape($fieldid=='rowid' ? $this->id : $this->ref)."'"; // ->ref must always be defined (set to id if field does not exists)
 		if ($this->restrictiononfksoc == 1 && !$user->rights->societe->client->voir && !$socid) $sql .= " AND sc.fk_user = ".$user->id;
 		if ($this->restrictiononfksoc == 2 && !$user->rights->societe->client->voir && !$socid) $sql .= " AND (sc.fk_user = ".$user->id.' OR te.fk_soc IS NULL)';
 		if (!empty($filter))
@@ -1856,7 +1868,7 @@ abstract class CommonObject
 		elseif ($this->restrictiononfksoc == 1 && $this->element != 'societe' && !$user->rights->societe->client->voir && !$socid) $sql .= ", ".MAIN_DB_PREFIX."societe as s"; // If we need to link to societe to limit select to socid
 		elseif ($this->restrictiononfksoc == 2 && $this->element != 'societe' && !$user->rights->societe->client->voir && !$socid) $sql .= " LEFT JOIN ".MAIN_DB_PREFIX."societe as s ON te.fk_soc = s.rowid"; // If we need to link to societe to limit select to socid
 		if ($this->restrictiononfksoc && !$user->rights->societe->client->voir && !$socid) $sql .= " LEFT JOIN ".MAIN_DB_PREFIX."societe_commerciaux as sc ON ".$aliastablesociete.".rowid = sc.fk_soc";
-		$sql .= " WHERE te.".$fieldid." > '".$this->db->escape($this->ref)."'"; // ->ref must always be defined (set to id if field does not exists)
+		$sql .= " WHERE te.".$fieldid." > '".$this->db->escape($fieldid=='rowid' ? $this->id : $this->ref)."'"; // ->ref must always be defined (set to id if field does not exists)
 		if ($this->restrictiononfksoc == 1 && !$user->rights->societe->client->voir && !$socid) $sql .= " AND sc.fk_user = ".$user->id;
 		if ($this->restrictiononfksoc == 2 && !$user->rights->societe->client->voir && !$socid) $sql .= " AND (sc.fk_user = ".$user->id.' OR te.fk_soc IS NULL)';
 		if (!empty($filter))
@@ -3031,7 +3043,12 @@ abstract class CommonObject
 					//print 'Line '.$i.' rowid='.$obj->rowid.' vat_rate='.$obj->vatrate.' total_ht='.$obj->total_ht.' total_tva='.$obj->total_tva.' total_ttc='.$obj->total_ttc.' total_ht_by_vats='.$total_ht_by_vats[$obj->vatrate].' total_tva_by_vats='.$total_tva_by_vats[$obj->vatrate].' (new calculation = '.$tmpvat.') total_ttc_by_vats='.$total_ttc_by_vats[$obj->vatrate].($diff?" => DIFF":"")."<br>\n";
 					if ($diff)
 					{
-						if (abs($diff) > 0.1) { dol_syslog('A rounding difference was detected into TOTAL but is too high to be corrected', LOG_WARNING); exit; }
+						if (abs($diff) > 0.1) {
+							$errmsg = 'A rounding difference was detected into TOTAL but is too high to be corrected. Some data in your line may be corrupted. Try to edit each line manually.';
+							dol_syslog($errmsg, LOG_WARNING);
+							dol_print_error('', $errmsg);
+							exit;
+						}
 						$sqlfix = "UPDATE ".MAIN_DB_PREFIX.$this->table_element_line." SET ".$fieldtva." = ".($obj->total_tva - $diff).", total_ttc = ".($obj->total_ttc - $diff)." WHERE rowid = ".$obj->rowid;
 						dol_syslog('We found a difference of '.$diff.' for line rowid = '.$obj->rowid.". We fix the total_vat and total_ttc of line by running sqlfix = ".$sqlfix);
 								$resqlfix = $this->db->query($sqlfix);
@@ -4553,7 +4570,7 @@ abstract class CommonObject
 		    // Search template files
 			$file = '';
 			$classname = '';
-			$filefound = 0;
+			$filefound = '';
 		    $dirmodels = array('/');
 		    if (is_array($conf->modules_parts['models'])) $dirmodels = array_merge($dirmodels, $conf->modules_parts['models']);
 		    foreach ($dirmodels as $reldir)
@@ -4567,7 +4584,7 @@ abstract class CommonObject
 				    $file = dol_buildpath($reldir.$modelspath.$file, 0);
 				    if (file_exists($file))
 				    {
-					    $filefound = 1;
+					    $filefound = $file;
 					    $classname = $prefix.'_'.$modele;
 					    break;
 				    }
@@ -4764,8 +4781,13 @@ abstract class CommonObject
 				    return -1;
 			    }
 		    } else {
-			    $this->error = $langs->trans("Error")." ".$langs->trans("ErrorFileDoesNotExists", $file);
-			    dol_print_error('', $this->error);
+		    	if (! $filefound) {
+			    	$this->error = $langs->trans("Error").' Failed to load doc generator with modelpaths='.$modelspath.' - modele='.$modele;
+			    	dol_print_error('', $this->error);
+		    	} else {
+		    		$this->error = $langs->trans("Error")." ".$langs->trans("ErrorFileDoesNotExists", $filefound);
+		    		dol_print_error('', $this->error);
+		    	}
 			    return -1;
 		    }
 		} else return $reshook;
@@ -6035,7 +6057,7 @@ abstract class CommonObject
 						// Several field into label (eq table:code|libelle:rowid)
 						$notrans = false;
 						$fields_label = explode('|', $InfoFieldList[1]);
-						if (is_array($fields_label))
+						if (count($fields_label) > 1)
 						{
 							$notrans = true;
 							foreach ($fields_label as $field_toshow)
@@ -6197,7 +6219,7 @@ abstract class CommonObject
 						$notrans = false;
 						// Several field into label (eq table:code|libelle:rowid)
 						$fields_label = explode('|', $InfoFieldList[1]);
-						if (is_array($fields_label)) {
+						if (count($fields_label) > 1) {
 							$notrans = true;
 							foreach ($fields_label as $field_toshow) {
 								$labeltoshow .= $obj->$field_toshow.' ';
@@ -7549,6 +7571,10 @@ abstract class CommonObject
 	{
 		if (is_null($value)) return 'NULL';
 		elseif (preg_match('/^(int|double|real|price)/i', $fieldsentry['type'])) return $this->db->escape("$value");
+		elseif ($fieldsentry['type'] == 'boolean') {
+		    if ($value) return 'true';
+		    else return 'false';
+        }
 		else return "'".$this->db->escape($value)."'";
 	}
 
@@ -7923,18 +7949,45 @@ abstract class CommonObject
 		}
 
 		// Delete cascade first
-		if (!empty($this->childtablesoncascade)) {
+		if (is_array($this->childtablesoncascade) && !empty($this->childtablesoncascade)) {
             foreach ($this->childtablesoncascade as $table)
             {
-                $sql = 'DELETE FROM '.MAIN_DB_PREFIX.$table.' WHERE '.$this->fk_element.' = '.$this->id;
-                $resql = $this->db->query($sql);
-                if (!$resql)
-                {
-                    $this->error = $this->db->lasterror();
-                    $this->errors[] = $this->error;
-                    $this->db->rollback();
-                    return -1;
-                }
+	            $deleteFromObject = explode(':', $table);
+	            if (count($deleteFromObject)>=2) {
+		            $className = str_replace('@', '', $deleteFromObject[0]);
+		            $filePath = $deleteFromObject[1];
+		            $columnName = $deleteFromObject[2];
+		            if (dol_include_once($filePath)) {
+			            $childObject = new $className($this->db);
+			            if (method_exists($childObject, 'deleteByParentField')) {
+				            $result = $childObject->deleteByParentField($this->id, $columnName);
+				            if ($result < 0) {
+								$error++;
+					            $this->errors[] = $childObject->error;
+					            break;
+				            }
+			            } else {
+							$error++;
+							$this->errors[] = "You defined a cascade delete on an object $childObject but there is no method deleteByParentField for it";
+							break;
+						}
+		            } else {
+			            $error++;
+						$this->errors[] = 'Cannot include child class file ' .$filePath;
+			            break;
+		            }
+	            } else {
+	            	// Delete record in child table
+	            	$sql = 'DELETE FROM ' . MAIN_DB_PREFIX . $table . ' WHERE ' . $this->fk_element . ' = ' . $this->id;
+
+		            $resql = $this->db->query($sql);
+		            if (!$resql) {
+						$error++;
+			            $this->error = $this->db->lasterror();
+			            $this->errors[] = $this->error;
+						break;
+		            }
+	            }
             }
         }
 
@@ -7972,6 +8025,62 @@ abstract class CommonObject
 			$this->db->commit();
 			return 1;
 		}
+	}
+
+	/**
+	 * Delete all child object from a parent ID
+	 *
+	 * @param		int		$parentId      Parent Id
+	 * @param		string	$parentField   Name of Foreign key parent column
+	 * @return		int						<0 if KO, >0 if OK
+	 * @throws Exception
+	 */
+	public function deleteByParentField($parentId = 0, $parentField = '')
+	{
+		global $user;
+
+		$error = 0;
+		$deleted = 0;
+
+		if (!empty($parentId) && !empty($parentField)) {
+			$this->db->begin();
+
+			$sql = "SELECT rowid FROM " . MAIN_DB_PREFIX . $this->table_element;
+			$sql .= ' WHERE '.$parentField.' = ' . (int) $parentId;
+
+			$resql = $this->db->query($sql);
+			if (!$resql) {
+				$this->errors[] = $this->db->lasterror();
+				$error++;
+			} else {
+				while ($obj = $this->db->fetch_object($resql)) {
+					$result = $this->fetch($obj->rowid);
+					if ($result < 0) {
+						$error++;
+						$this->errors[] = $this->error;
+					} else {
+						$result = $this->delete($user);
+						if ($result < 0) {
+							$error++;
+							$this->errors[] = $this->error;
+						} else {
+							$deleted++;
+						}
+					}
+				}
+			}
+
+			if (empty($error)) {
+				$this->db->commit();
+				return $deleted;
+			} else {
+				$this->error = implode(', ', $this->errors);
+				$this->db->rollback();
+				return $error * -1;
+			}
+		}
+
+		return $deleted;
 	}
 
 	/**

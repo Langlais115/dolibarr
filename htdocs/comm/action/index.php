@@ -7,7 +7,7 @@
  * Copyright (C) 2014      Cedric GROSS         <c.gross@kreiz-it.fr>
  * Copyright (C) 2015      Marcos García        <marcosgdf@gmail.com>
  * Copyright (C) 2017      Open-DSI             <support@open-dsi.fr>
- * Copyright (C) 2018       Frédéric France         <frederic.france@netlogic.fr>
+ * Copyright (C) 2018      Frédéric France      <frederic.france@netlogic.fr>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -440,7 +440,7 @@ if (!empty($conf->use_javascript_ajax))	// If javascript on
     $s .= '</script>'."\n";
 
 	// Local calendar
-	$s .= '<div class="nowrap clear inline-block minheight20"><input type="checkbox" id="check_mytasks" name="check_mytasks" checked disabled> '.$langs->trans("LocalAgenda").' &nbsp; </div>';
+	$s .= '<div class="nowrap inline-block minheight20"><input type="checkbox" id="check_mytasks" name="check_mytasks" checked disabled> '.$langs->trans("LocalAgenda").' &nbsp; </div>';
 
 	// External calendars
 	if (is_array($showextcals) && count($showextcals) > 0)
@@ -501,7 +501,7 @@ $sql .= ' a.datep2,';
 $sql .= ' a.percent,';
 $sql .= ' a.fk_user_author,a.fk_user_action,';
 $sql .= ' a.transparency, a.priority, a.fulldayevent, a.location,';
-$sql .= ' a.fk_soc, a.fk_contact,';
+$sql .= ' a.fk_soc, a.fk_contact, a.fk_project,';
 $sql .= ' a.fk_element, a.elementtype,';
 $sql .= ' ca.code as type_code, ca.libelle as type_label, ca.color as type_color';
 $sql .= ' FROM '.MAIN_DB_PREFIX.'c_actioncomm as ca, '.MAIN_DB_PREFIX."actioncomm as a";
@@ -608,7 +608,9 @@ if ($resql)
 
         // Create a new object action
         $event = new ActionComm($db);
+
         $event->id = $obj->id;
+        $event->ref = $event->id;
 
         $event->datep = $db->jdate($obj->datep); // datep and datef are GMT date. Example: 1970-01-01 01:00:00, jdate will return 0 if TZ of PHP server is Europe/Berlin
         $event->datef = $db->jdate($obj->datep2);
@@ -631,6 +633,8 @@ if ($resql)
         $event->transparency = $obj->transparency;
         $event->fk_element = $obj->fk_element;
         $event->elementtype = $obj->elementtype;
+
+        $event->fk_project = $obj->fk_project;
 
         $event->thirdparty_id = $obj->fk_soc;
         $event->contact_id = $obj->fk_contact;
@@ -710,7 +714,10 @@ if ($showbirthday)
         {
             $obj = $db->fetch_object($resql);
             $event = new ActionComm($db);
+
             $event->id = $obj->rowid; // We put contact id in action id for birthdays events
+            $event->ref = $event->id;
+
             $datebirth = dol_stringtotime($obj->birthday, 1);
             //print 'ee'.$obj->birthday.'-'.$datebirth;
             $datearray = dol_getdate($datebirth, true);
@@ -782,6 +789,7 @@ if ($conf->global->AGENDA_SHOW_HOLIDAYS)
 
             // Need the id of the leave object for link to it
             $event->id                      = $obj->rowid;
+            $event->ref                     = $event->id;
 
             $event->type_code               = 'HOLIDAY';
             $event->datep                   = dol_mktime(0, 0, 0, $dateStartArray['mon'], $dateStartArray['mday'], $dateStartArray['year'], true);
@@ -1006,6 +1014,8 @@ if (count($listofextcals))
                 if ($addevent)
                 {
                     $event->id = $icalevent['UID'];
+                    $event->ref = $event->id;
+
                     $event->icalname = $namecal;
                     $event->icalcolor = $colorcal;
                     $usertime = 0; // We dont modify date because we want to have date into memory datep and datef stored as GMT date. Compensation will be done during output.
@@ -1566,7 +1576,7 @@ function show_day_events($db, $day, $month, $year, $monthshown, $style, &$eventa
                             // Hour start
                             if ($tmpyearstart == $annee && $tmpmonthstart == $mois && $tmpdaystart == $jour)
                             {
-                                $daterange .= dol_print_date($event->date_start_in_calendar, '%H:%M'); // Il faudrait utiliser ici tzuser, mais si on ne peut pas car qd on rentre un date dans fiche action, en input la conversion local->gmt se base sur le TZ server et non user
+                                $daterange .= dol_print_date($event->date_start_in_calendar, 'hour'); // Il faudrait utiliser ici tzuser, mais si on ne peut pas car qd on rentre un date dans fiche action, en input la conversion local->gmt se base sur le TZ server et non user
                                 if ($event->date_end_in_calendar && $event->date_start_in_calendar != $event->date_end_in_calendar)
                                 {
                                     if ($tmpyearstart == $tmpyearend && $tmpmonthstart == $tmpmonthend && $tmpdaystart == $tmpdayend)
@@ -1586,7 +1596,7 @@ function show_day_events($db, $day, $month, $year, $monthshown, $style, &$eventa
                             if ($event->date_end_in_calendar && $event->date_start_in_calendar != $event->date_end_in_calendar)
                             {
                                 if ($tmpyearend == $annee && $tmpmonthend == $mois && $tmpdayend == $jour)
-                                $daterange .= dol_print_date($event->date_end_in_calendar, '%H:%M'); // Il faudrait utiliser ici tzuser, mais si on ne peut pas car qd on rentre un date dans fiche action, en input la conversion local->gmt se base sur le TZ server et non user
+                                $daterange .= dol_print_date($event->date_end_in_calendar, 'hour'); // Il faudrait utiliser ici tzuser, mais si on ne peut pas car qd on rentre un date dans fiche action, en input la conversion local->gmt se base sur le TZ server et non user
                             }
                         } else {
                             if ($showinfo)
